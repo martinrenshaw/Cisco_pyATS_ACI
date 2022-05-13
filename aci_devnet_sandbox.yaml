@@ -1,0 +1,29 @@
+devices:
+  apic1:
+    os: nxos
+    alias: uut
+    # series: aci
+    type: apic
+    platform: aci
+    custom:
+      abstraction:
+        order: [os, platform]  
+    connections:
+      defaults:
+        via: rest
+      rest:
+        class: rest.connector.Rest
+        host: sandboxapicdc.cisco.com
+        ip: sandboxapicdc.cisco.com
+        #port: 443
+        protocol: https
+        credentials:
+          rest:
+            username: admin
+            # password: ciscopsdt
+            password: "%ENC{gAAAAABgIQ_xY0_quhuQqLJV1qvn9C788AH42s3Uaamo73GWyAUcVAmAqlpj5ePW9nTYA0niLMrqohXCPw6HHC6tj8wAM43V5g==}"
+            # password: "%ASK{Enter APIC password: }"
+
+
+
+# check the docs for the pyATS secret_strings

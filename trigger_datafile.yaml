@@ -1,0 +1,501 @@
+
+# some vars used whilst testing
+vars:
+  tenant: greenHop
+  filter: http-mr
+  filter_entry: pyats-tcp-443
+  name: tcp-1433
+  mrten:
+    - greenHop
+    - blueHop
+
+# Name of the testcase
+01_BASIC_HEALTH_CHECKS:
+  groups: ["filter"]
+  # Location of the blitz trigger
+  source:
+    pkg: genie.libs.sdk
+    class: triggers.blitz.blitz.Blitz
+
+  # Field containing all the Testcase sections
+  test_sections:
+
+    - 01_Check_APIC_health:   # Check heakth of each of the three APIC using query-target-filter node id num
+
+        - loop:
+            loop_variable_name: nodeid    # create a loop var 1-3 and then use it later as part of the query-target-filter 
+            value:
+                - 1
+                - 2
+                - 3
+            actions:
+            - api:
+                custom_start_step_message: Health Check on APIC
+                device: uut
+                function: apic_rest_get
+                arguments:
+                  dn: api/node/mo/topology/pod-1/node-1.json
+                  query_target: 'subtree'
+                  rsp_subtree: 'no'
+                  query_target_filter: eq(infraWiNode.id,"%VARIABLES{nodeid}")
+                  rsp_prop_include: 'all'
+                  rsp_subtree_include: ''
+                  rsp_subtree_class: 'infraWiNode'
+                
+                include: 
+                  - contains('fully-fit')   # check the output dict for the words fully-fit , fail if its not present
+                  # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+
+        - loop:
+            loop_variable_name: cpuPct
+            range: 5                                                    # create a loop of 5 and sent the api call to get CPU stats
+            actions:
+            - api:
+                custom_start_step_message: Health Check on APIC
+                device: uut
+                function: apic_rest_get
+                arguments:
+                  dn: api/node/class/procEntity.json
+                  # query_target: 'subtree'
+                  # rsp_subtree: 'no'
+                  # query_target_filter: eq(infraWiNode.id,"%VARIABLES{nodeid}")
+                  # rsp_prop_include: 'all'
+                  # rsp_subtree_include: ''
+                  # rsp_subtree_class: 'infraWiNode'
+                
+                include:
+                    - contains('cpuPct')
+                    - value_operator('cpuPct', '<', 60) # check the output from the api call and that the CPU is less then X, fail if not
+                    # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+
+            - sleep:
+                sleep_time: 5
+
+
+02_ADV_HEALTH_CHECKS:
+  groups: ["filter"]
+  # Location of the blitz trigger
+  source:
+    pkg: genie.libs.sdk
+    class: triggers.blitz.blitz.Blitz
+
+  # Field containing all the Testcase sections
+  test_sections:
+
+    - 01_Check_Fabric_health:   # Check heakth of each of the three APIC using query-target-filter node id num
+
+        # Get Fabric node 
+        # filter node id as a item in a list [node_id]
+        # get fabric node by id and check that it has an IP address and that it isnt in state "undiscovered"
+        - api:
+            custom_start_step_message: Get JSON of FabricNodeIDs
+            device: uut
+            function: apic_rest_get
+            arguments:
+              dn: api/node/class/fabricNode.json
+              # query_target: 'subtree'
+              # rsp_subtree: 'no'
+              # query_target_filter: 'eq(infraWiNode.id,"1")'
+              # rsp_prop_include: 'all'
+              # rsp_subtree_include: ''
+              # rsp_subtree_class: 'infraWiNode'
+            # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+            # exclude:
+            #   - contains_key_value("totalCount", '0')
+            save:
+              - variable_name: fabric_node_id
+                filter: get_values('id')
+
+        - print:
+            print_item1:
+                value: "Here are the Fabric_Node_IDs: %VARIABLES{fabric_node_id}"
+
+                
+        - loop:
+            loop_variable_name: nid
+            value: "%VARIABLES{fabric_node_id}"                                                   # loop over var and store as nid
+            actions:
+            - api:
+                custom_start_step_message: Get JSON of FabricNodeIDs by NodeID
+                device: uut
+                function: apic_rest_get
+                arguments:
+                  # dn: api/node/class/fabricNode.json  # %{vars.filter_entry}  # api/mo/topology/pod-1/node-101.json
+                  dn: api/mo/topology/pod-1/node-%VARIABLES{nid}.json
+                  
+                include:
+                  - contains('address')
+                exclude:
+                  - contains_key_value("address", '0.0.0.0')  # look in the output if the dictionary count is 0 then fail
+
+
+##############################################################################################################
+#                                                                                                            # 
+#                                   Below this section is testing the ART_OF_D_POSSIBLE                      # 
+#                                                                                                            # 
+##############################################################################################################
+
+TESTING_OTHERS:
+  groups: ["filter"]
+  # Location of the blitz trigger
+  source:
+    pkg: genie.libs.sdk
+    class: triggers.blitz.blitz.Blitz
+
+  test_sections:
+
+    - 02_Check_list_of_Tenants_exist:     # need more development , find all tenant save to var and then iterate over them
+        - loop:
+            loop_variable_name: tenant  # this tests for a static list of tenants and fails if they are missing
+            value:
+              - greenHop
+              - blueHop
+              - redHop
+            actions:
+              - api:
+                  custom_start_step_message: Does Tenant exist?
+                  device: uut
+                  function: apic_rest_get
+                  arguments:
+                    #dn: /api/node/class/fvTenant.json
+                    dn: /api/mo/uni/tn-%VARIABLES{tenant}.json    # using loop_variable_name: tenant
+                    # query_target: 'subtree'
+                    # rsp_subtree: ''
+                    # query_target_filter: ''
+                    # rsp_prop_include: ''
+                    # rsp_subtree_include: ''
+                    # rsp_subtree_class: ''
+                  exclude:
+                    - contains_key_value("totalCount", '0')  # look in the output if the dictionary keycount is 0 then fail
+
+    - 03_Check_BridgeDomains_exist:   # Check heakth of each of the three APIC using query-target-filter node id num
+        - api:
+            custom_start_step_message: Get list of BDs
+            device: uut
+            function: apic_rest_get
+            arguments:
+              dn: api/node/class/fvBD.json
+              # query_target: 'subtree'
+              # rsp_subtree: 'no'
+              # query_target_filter: 'eq(infraWiNode.id,"1")'
+              # rsp_prop_include: 'all'
+              # rsp_subtree_include: ''
+              # rsp_subtree_class: 'infraWiNode'
+            # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+            # exclude:
+            #   - contains_key_value("totalCount", '0')
+            save:
+              - variable_name: bd_list
+              - filter: get_values('totalCount')
+
+    - 04_Check_Subnets_exists:   # Check heakth of each of the three APIC using query-target-filter node id num
+        - api:
+            custom_start_step_message: Get list of Subnets
+            device: uut
+            function: apic_rest_get
+            arguments:
+              dn: api/node/class/fvSubnet.json
+              # query_target: 'subtree'
+              # rsp_subtree: 'no'
+              # query_target_filter: 'eq(infraWiNode.id,"1")'
+              # rsp_prop_include: 'all'
+              # rsp_subtree_include: ''
+              # rsp_subtree_class: 'infraWiNode'
+            # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+            exclude:
+              - contains_key_value("totalCount", '0')
+
+
+    - 05_Check_Snapshot_from_today_exists:   # Check heakth of each of the three APIC using query-target-filter node id num
+        - api:
+            custom_start_step_message: Get list of Snapshots
+            device: uut
+            function: apic_rest_get
+            arguments:
+              dn: api/node/class/configSnapshot.json
+              # query_target: 'subtree'
+              # rsp_subtree: 'no'
+              # query_target_filter: 'eq(infraWiNode.id,"1")'
+              # rsp_prop_include: 'all'
+              # rsp_subtree_include: ''
+              # rsp_subtree_class: 'infraWiNode'
+            # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+            save:
+              - variable_name: SnapshotList
+            # include:
+            #   - contains_key_value("ConfigSnapshot.createTime", '%ENV{date}')
+
+    - 06_Get_all_tree_from_tenant:   # Check heakth of each of the three APIC using query-target-filter node id num
+        - api:
+            custom_start_step_message: Get list of Tenants
+            device: uut
+            function: apic_rest_get
+            arguments:
+              dn: api/mo/uni/tn-Heroes.json
+              # query_target: 'subtree'
+              rsp_subtree: 'full'
+              # query_target_filter: 'eq(infraWiNode.id,"1")'
+              # rsp_prop_include: 'all'
+              # rsp_subtree_include: ''
+              # rsp_subtree_class: 'infraWiNode'
+            # https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+            # save:
+            #   - variable_name: SnapshotList
+            # include:
+            #   - contains_key_value("ConfigSnapshot.createTime", '%ENV{date}')
+
+    - 07_Print_counts:
+        - print:
+            print_item1:
+                value: "some text str to check that vari exists %VARIABLES{SnapshotList}"
+          #  print_item2: "%VARIABLES{bd_list}"
+ 
+##############################################################################################################
+#                                                                                                            # 
+#                                   Below this section is all our previous tests                             # 
+#                                                                                                            # 
+##############################################################################################################
+
+
+# Find info on how to write these trigger_datafile actions (called Blitz) #
+# https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/writeblitz/writeblitz.html #
+
+# Info about the pyats API calls #
+# https://pubhub.devnetcloud.com/media/pyats-development-guide/docs/writeblitz/writeblitz.html#api
+
+# the rest call python file #
+# note this has change between ver 20.12 and 21.01 !! careful
+# https://github.com/CiscoTestAutomation/genielibs/blob/master/pkgs/sdk-pkg/src/genie/libs/sdk/apis/nxos/aci/utils.py#L13
+
+
+# info on the DQ include/ecxclude stuff for dictionary matching #
+# https://pubhub.devnetcloud.com/media/genie-docs/docs/userguide/utils/index.html#dq   -- use dq module to match results
+
+
+    # - 07_Get_all_tree_from_tenant:   # Check heakth of each of the three APIC using query-target-filter node id num
+    #     - api:
+    #         custom_start_step_message: Get list of Snapshots
+    #         # device: uut
+    #         function: verify_aci_registered_nodes_in_state
+    #         arguments:
+    #           # dn: api/mo/uni/tn-Heroes.json
+    #           node_ids: [1]
+    #           state: in-service
+    #           device: uut
+    #           # query_target: 'subtree'
+    #           # rsp_subtree: 'full'
+
+
+
+    # # Section name - Can be any name, it will show as the first section of
+    # # the testcase
+    # - 01_check_filter_entry_does_not_exist:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_get
+    #         arguments:
+    #           dn: /api/node/class/vzEntry.json
+    #         exclude:
+    #           - contains('%{vars.filter_entry}')
+
+    # - create_filter_entry_under_tenant:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_post
+    #         arguments:
+    #           dn: "/api/node/mo/uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}.json"
+    #           payload: |
+    #             {
+    #               "vzEntry": {
+    #                 "attributes": {
+    #                   "dn": "uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}",
+    #                   "name": "%{vars.name}",
+    #                   "etherT": "ip",
+    #                   "status": "created,modified",
+    #                   "prot": "tcp",
+    #                   "dFromPort": "https",
+    #                   "dToPort": "https",
+    #                   "rn": "e-%{vars.filter_entry}" 
+    #                 },
+    #                 "children":[]
+    #               }
+    #             }
+    #         include:
+    #           - contains_key_value("totalCount", '0')
+
+    #     - sleep:
+    #         sleep_time: 30
+
+        # - api:
+        #     device: uut
+        #     function: apic_rest_get
+        #     arguments:
+        #       dn: /api/node/class/vzEntry.json
+        #     include:
+        #       - contains('%{vars.name}')
+        #     save:
+        #       - variable_name: pre_snapshot
+
+        # - api:
+        #     device: uut
+        #     function: apic_rest_get
+        #     arguments:
+        #       dn: /api/node/class/vzEntry.json
+        #     include:
+        #       - contains('%{vars.name}')
+        #     save:
+        #       - variable_name: post_snapshot
+
+        # - sleep:
+        #     sleep_time: 30
+
+        # - diff:
+        #     pre: "%VARIABLES{pre_snapshot}"
+        #     post: "%VARIABLES{post_snapshot}"
+        #     device: uut
+        #     mode: modified
+
+    #- 02_Check_list_of_Tenants_exist:
+        # - loop:
+        #     loop_variable_name: tenant
+        #     value:
+        #       - greenHop
+        #       - blueHop
+        #     actions:
+        #       - api:
+        #           device: uut
+        #           function: apic_rest_get
+        #           arguments:
+        #             dn: /api/node/class/fvTenant.json
+        #             # query_target: 'subtree'
+        #             # rsp_subtree: ''
+        #             # query_target_filter: ''
+        #             # rsp_prop_include: ''
+        #             # rsp_subtree_include: ''
+        #             # rsp_subtree_class: ''
+        #           include:
+        #             - contains('%VARIABLES{tenant}')
+
+      # Second section name        
+    # - check_filter_entry_does_not_exist_in_tenant:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_get
+    #         arguments:
+    #           dn: /api/node/mo/uni/tn-%{vars.tenant}/flt-%{vars.filter}.json
+    #           query_target: children
+    #         exclude:
+    #           - contains('%{vars.filter_entry}')
+    # - create_filter_entry_under_tenant:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_post
+    #         arguments:
+    #           dn: "/api/node/mo/uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}.json"
+    #           payload: |
+    #             {
+    #               "vzEntry": {
+    #                 "attributes": {
+    #                   "dn": "uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}",
+    #                   "name": "%{vars.filter_entry}",
+    #                   "etherT": "ip",
+    #                   "status": "created,modified",
+    #                   "prot": "tcp",
+    #                   "dFromPort": "https",
+    #                   "dToPort": "https",
+    #                   "rn": "e-%{vars.filter_entry}" 
+    #                 },
+    #                 "children":[]
+    #               }
+    #             }
+    #         include:
+    #           - contains_key_value("totalCount", '0')
+    # - check_filter_entry_exists:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_get
+    #         arguments:
+    #           dn: /api/node/class/vzEntry.json
+    #         include:
+    #           - contains('%{vars.filter_entry}')
+    # - check_filter_entry_exists_in_tenant:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_get
+    #         arguments:
+    #           dn: /api/node/mo/uni/tn-%{vars.tenant}/flt-%{vars.filter}.json
+    #           query_target: children
+    #         include:
+    #           - contains('%{vars.filter_entry}')
+    # - delete_filter_entry:
+    #     - api:
+    #         device: uut
+    #         function: apic_rest_post
+    #         arguments:
+    #           dn: "/api/node/mo/uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}.json"
+    #           payload: |
+    #             {
+    #               "vzEntry": {
+    #                 "attributes": {
+    #                   "dn": "uni/tn-%{vars.tenant}/flt-%{vars.filter}/e-%{vars.filter_entry}",
+    #                   "status": "deleted"
+    #                 },
+    #                 "children": []
+    #               }
+    #             }
+    #         include:
+    #           - contains_key_value("totalCount", '0')
+
+
+# https://www.cisco.com/c/en/us/td/docs/switches/datacenter/aci/apic/sw/2-x/rest_cfg/2_1_x/b_Cisco_APIC_REST_API_Configuration_Guide/b_Cisco_APIC_REST_API_Configuration_Guide_chapter_01001.html
+
+# Step 1	
+# Verify a contract for an EPG or an external network with XML such as the following example for a provider:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/fvRsProv.xml
+
+# Step 2	
+# Verify a contract on an EPG with XML such as the following example for a consumer:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/fvRsCons.xml
+
+# Step 3	
+# Verify exported contracts using XML such as the following example:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/vzCPif.xml
+
+# Step 4	
+# Verify contracts for a VRF with XML such as the following example:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/vzBrCP.xml
+
+# Step 5	
+# Verify taboo contracts with XML such as the following example:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/vzTaboo.xml
+# For taboo contracts for an EPG, use the same query as for contracts for EPGs.
+
+# Step 6	
+# Verify filters using XML such as the following example:
+# Example:
+# QUERY https://apic-ip-address/api/node/class/vzFilter.xml
+
+
+# To view Layer 3 drop log data, send the following query using the REST API:
+
+# GET https://apic-ip-address/api/class/acllogDropL3Flow
+# acllogDropL2Flow
+
+# acllogPermitL2Flow
+
+# acllogDropL3Flow
+
+# acllogPermitL3Flow
+
+# acllogDropL2Pkt
+
+# acllogPermitL2Pkt
+
+# acllogDropL3Pkt
+
+# acllogPermitL3Pkt
