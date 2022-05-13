@@ -1,8 +1,10 @@
 # Cisco ACI state testing with python and Cisco pyATS
 
+## python file
+
 run the `devnet_aci.py` file, this will output Tenanst, fabric devices, mac_endpoints, ip_endpoints & the RIB to stdout and a text file.
 
-
+## pyATS - to ACI rest
 ## Installation
 
 Install pyATS|Genie and Rest Connector.
